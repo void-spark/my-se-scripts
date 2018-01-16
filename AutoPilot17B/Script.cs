@@ -80,7 +80,7 @@ Persistent persistent;
 Target target;
 
 void Main(string argument) {
-  elapsedMs += ElapsedTime.TotalMilliseconds;
+  elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
   if(!first && elapsedMs == 0.0) {
     // Presumably we got triggered twice in the same tick?
     // Don't know how else to detect this.
@@ -173,7 +173,7 @@ bool primaryLogic(string argument, double elapsedNow) {
 
   location = myRemote.GetPosition();
   Print("Position: " + new MyVectD(location), true);
-  
+
   // Only do stuff if time has passed, otherwise we get NaN's and such (and our last position will still be 0,0,0)
   if(elapsedNow != 0.0) {
     toWorldRot = myRemote.WorldMatrix.GetOrientation();
@@ -207,7 +207,11 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
   bool dockPart1 = target.docking && dockingApproach;
   bool dockPart2 = target.docking && !dockingApproach;
 
-  if(myConnector.IsConnected) {
+// Connected: green/Locked  IsLocked = true, IsConnected = true
+// Connectable: yellow or cyan, ready to lock,  IsLocked = true, IsConnected = false
+// Unconnected: red/white , IsLocked = false, IsConnected = false
+
+  if(myConnector.Status == MyShipConnectorStatus.Connected) {
     TerminalBlockExtentions.ApplyAction(myConnector,"SwitchLock");
   }
   if(myConnector.Enabled != dockPart2) {
@@ -244,10 +248,9 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
     } else {
       NextTarget();
     }
-  } else if(dockPart2 && myConnector.IsLocked) {
+  } else if(dockPart2 && myConnector.Status == MyShipConnectorStatus.Connectable) {
       TerminalBlockExtentions.ApplyAction(myConnector,"SwitchLock");
-      Print("Locked: "+ myConnector.IsLocked, true);
-      Print("Connected: " + myConnector.IsConnected, true);
+      Print("Connector status: " + myConnector.Status, true);
       Print("Docked", true);
 
       NextTarget();
@@ -425,7 +428,7 @@ public bool Setup() {
   myLcd = FindFirstWithPrefixOrAny<IMyTextPanel>();
   if(myLcd != null) {
     myLcd.ShowPublicTextOnScreen();
-    myLcd.SetValueFloat("FontSize", 0.7f);
+    myLcd.SetValueFloat("FontSize", 0.84f);
   }
 
   myTimer = FindFirstWithPrefixOrAny<IMyTimerBlock>();
@@ -480,15 +483,19 @@ public bool Setup() {
   gyroInfos = list.ConvertAll(x => new GyroInfo((IMyGyro)x));
 
   targets = new List<String>();
-  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
-  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
-  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
-  targets.Add("GPS:CONN_MESA:-50139.2:-10769.9:34651.28:");
 
-  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
-  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
-  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
-  targets.Add("GPS:CONN_BR:-43332.44:-20002.64:37760.94:");
+  targets.Add("GPS:NAV1:13505.1:143686.8:-108313.36:");
+  targets.Add("GPS:CONN_1:13534.84:143649.95:-108380.27:");
+
+//  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
+//  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
+//  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
+//  targets.Add("GPS:CONN_MESA:-50139.2:-10769.9:34651.28:");
+
+//  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
+//  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
+//  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
+//  targets.Add("GPS:CONN_BR:-43332.44:-20002.64:37760.94:");
 
 //  targets.Add("GPS:TEST1:-43345.57:-20039.8:37776.12:");
 //  targets.Add("GPS:TEST2:-42841.2:-22348.01:38199.66:");
@@ -615,7 +622,7 @@ public struct ThrusterInfo {
 
   public ThrusterInfo(IMyThrust thruster) {
     this.thruster = thruster;
-    this.min = thruster.GetMininum<float>("Override");
+    this.min = thruster.GetMinimum<float>("Override");
     this.max = thruster.GetMaximum<float>("Override");
   }
 
