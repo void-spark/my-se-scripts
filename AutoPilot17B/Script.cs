@@ -24,7 +24,6 @@ List<IMyReactor> reactors;
 bool set;
 String lcdBuffer;
 IMyTextPanel myLcd;
-IMyTimerBlock myTimer;
 IMyRemoteControl myRemote;
 IMyShipConnector myConnector;
 
@@ -89,50 +88,56 @@ void Main(string argument) {
   first = false;
 
   if(!set) {
+    // TODO: Use Program() instead of Setup() ??
     set = Setup();
     if(!set) {
+      // Setup failed, don't continue
       if(myLcd != null) {
         myLcd.WritePublicText(lcdBuffer, false);
       }
+      Runtime.UpdateFrequency = UpdateFrequency.None;
       return;
     }
   }
 
   persistent.load(Storage);
 
-  if(argument == "STOP" || !myTimer.Enabled) {
+  if(argument == "STOP") {
     disengage();
     Print("Emergency stop", false);
     persistent.running = false;
     elapsedMs = 0.0;
+    Runtime.UpdateFrequency = UpdateFrequency.None;
   } else if(argument == "START") {
     Print("Starting", false);
     if(!Bootup()) {
+      // Bootup failed, don't continue
+      Runtime.UpdateFrequency = UpdateFrequency.None;
       return;
     }
     persistent.running = true;
     first = true;
     elapsedMs = 0.0;
-    TerminalBlockExtentions.ApplyAction(myTimer,"TriggerNow");
+    Runtime.UpdateFrequency = UpdateFrequency.Update1;
   } else if(argument == "NEXT") {
     NextTarget();
     Print("Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
   } else if(argument == "KEEPALIVE") {
     Print("Keep alive, running: " + persistent.running + ", Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
     if(persistent.running) {
-      TerminalBlockExtentions.ApplyAction(myTimer,"TriggerNow");
+        Runtime.UpdateFrequency = UpdateFrequency.Update1;
     }
   } else if(argument == "RESET") {
     Print("Reset", false);
     persistent.load("");
     elapsedMs = 0.0;
     set = false;
+    Runtime.UpdateFrequency = UpdateFrequency.None;
   } else if(!persistent.running) {
     Print("Not running", true);
     elapsedMs = 0.0;
   } else {
     if(step++ % interval != 0) {
-      TerminalBlockExtentions.ApplyAction(myTimer, "TriggerNow");
       return;
     }
     Print("-- " + PREFIX + "(" + step + ") -- ", false);
@@ -140,9 +145,10 @@ void Main(string argument) {
     elapsedMs = 0.0;
     if(!primaryLogic(argument, elapsedNow)) {
       disengage();
+      // We're done, stop running
       persistent.running = false;
+      Runtime.UpdateFrequency = UpdateFrequency.None;
     }
-    TerminalBlockExtentions.ApplyAction(myTimer,"TriggerNow");
   }
 
   if(myLcd != null) {
@@ -155,7 +161,7 @@ void Main(string argument) {
 bool primaryLogic(string argument, double elapsedNow) {
 
   Print("Elapsed MS: " +  elapsedNow, true );
-  Print("Timer: " + (myTimer != null) + ", Remote: " + (myRemote != null), true );
+  Print("Remote: " + (myRemote != null), true );
   Print("Gyros: " + gyroInfos.Count + ", Thrusters: " + thrusters.Count, true );
   Print("Remote: " + GetGridPos(myRemote), true );
   Print("Connector: " + GetGridPos(myConnector), true );
@@ -431,12 +437,6 @@ public bool Setup() {
     myLcd.SetValueFloat("FontSize", 0.84f);
   }
 
-  myTimer = FindFirstWithPrefixOrAny<IMyTimerBlock>();
-  if(myTimer == null) {
-    Print("Timer not found!", true);
-    return false;
-  }
-
   myRemote = FindFirstWithPrefixOrAny<IMyRemoteControl>();
   if(myRemote == null) {
     Print("Remote not found!", true);
@@ -533,14 +533,6 @@ public bool Setup() {
 }
 
 bool Bootup() {
-
-  if(!myTimer.Enabled) {
-    TerminalBlockExtentions.ApplyAction(myTimer,"OnOff_On");
-  }
-  if(!myTimer.IsWorking) {
-    Print("Timer cannot be enabled (broken?).", true);
-    return false;
-  }
 
   for (int i = 0; i < reactors.Count; ++i) {
     IMyReactor reactor = reactors[i];
