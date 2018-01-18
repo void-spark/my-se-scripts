@@ -1,9 +1,18 @@
-﻿bool ENABLE_REACTORS = false;
+// Should we enable reactors on bootup
+bool ENABLE_REACTORS = false;
 
+// Each X'th time we're called to actually do something.
+int INTERVAL = 3;
+
+// Counter for how many times we've been called.
 long step;
 
-bool first = true;
+// Time since start
 double elapsedMs;
+
+// Indicates if setup was (succesfully) completed.
+// Can bet reset with "RESET"
+bool isSetupDone;
 
 MyPid pid;
 
@@ -21,7 +30,6 @@ List<IMyThrust> thrusters;
 List<IMyBatteryBlock> batteries;
 List<IMyReactor> reactors;
 
-bool set;
 String lcdBuffer;
 IMyTextPanel myLcd;
 IMyRemoteControl myRemote;
@@ -41,8 +49,6 @@ Vector3D location;
 MatrixD toWorldRot;
 MatrixD toShipRot;
 static Matrix shipOrient;
-
-int interval = 3;
 
 List<String> targets;
 bool dockingApproach;
@@ -75,80 +81,86 @@ public class Target {
   }
 }
 
+// TODO: Load only in constructor? Which means creating in it, not in setup.
 Persistent persistent;
 Target target;
 
-void Main(string argument) {
+void Main(string argument, UpdateType updateType) {
   elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
-  if(!first && elapsedMs == 0.0) {
-    // Presumably we got triggered twice in the same tick?
-    // Don't know how else to detect this.
-    return;
-  }
-  first = false;
 
-  if(!set) {
-    // TODO: Use Program() instead of Setup() ??
-    set = Setup();
-    if(!set) {
-      // Setup failed, don't continue
-      if(myLcd != null) {
-        myLcd.WritePublicText(lcdBuffer, false);
+  // User, timer, etc. triggered us
+  if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
+      if(!isSetupDone) {
+        // Try to do inital setup, don't do this in the constructor, since we might want to redo it if the ship changed.
+        // Which can be done using the 'RESET' command.
+        isSetupDone = Setup();
+        if(!isSetupDone) {
+          // Setup failed, don't continue
+          if(myLcd != null) {
+            myLcd.WritePublicText(lcdBuffer, false);
+          }
+          Runtime.UpdateFrequency = UpdateFrequency.None;
+          return;
+        }
       }
-      Runtime.UpdateFrequency = UpdateFrequency.None;
-      return;
-    }
   }
 
   persistent.load(Storage);
 
-  if(argument == "STOP") {
-    disengage();
-    Print("Emergency stop", false);
-    persistent.running = false;
-    elapsedMs = 0.0;
-    Runtime.UpdateFrequency = UpdateFrequency.None;
-  } else if(argument == "START") {
-    Print("Starting", false);
-    if(!Bootup()) {
-      // Bootup failed, don't continue
-      Runtime.UpdateFrequency = UpdateFrequency.None;
-      return;
-    }
-    persistent.running = true;
-    first = true;
-    elapsedMs = 0.0;
-    Runtime.UpdateFrequency = UpdateFrequency.Update1;
-  } else if(argument == "NEXT") {
-    NextTarget();
-    Print("Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
-  } else if(argument == "KEEPALIVE") {
-    Print("Keep alive, running: " + persistent.running + ", Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
-    if(persistent.running) {
+  // User, timer, etc. triggered us
+  if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
+      if(argument == "STOP") {
+        disengage();
+        Print("Emergency stop", false);
+        persistent.running = false;
+        elapsedMs = 0.0;
+        Runtime.UpdateFrequency = UpdateFrequency.None;
+      } else if(argument == "START") {
+        Print("Starting", false);
+        if(!Bootup()) {
+          // Bootup failed, don't continue
+          Runtime.UpdateFrequency = UpdateFrequency.None;
+          return;
+        }
+        persistent.running = true;
+        elapsedMs = 0.0;
         Runtime.UpdateFrequency = UpdateFrequency.Update1;
-    }
-  } else if(argument == "RESET") {
-    Print("Reset", false);
-    persistent.load("");
-    elapsedMs = 0.0;
-    set = false;
-    Runtime.UpdateFrequency = UpdateFrequency.None;
-  } else if(!persistent.running) {
-    Print("Not running", true);
-    elapsedMs = 0.0;
-  } else {
-    if(step++ % interval != 0) {
-      return;
-    }
-    Print("-- " + PREFIX + "(" + step + ") -- ", false);
-    double elapsedNow = elapsedMs;
-    elapsedMs = 0.0;
-    if(!primaryLogic(argument, elapsedNow)) {
-      disengage();
-      // We're done, stop running
-      persistent.running = false;
-      Runtime.UpdateFrequency = UpdateFrequency.None;
-    }
+      } else if(argument == "NEXT") {
+        NextTarget();
+        Print("Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
+      } else if(argument == "KEEPALIVE") {
+        Print("Keep alive, running: " + persistent.running + ", Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
+        if(persistent.running) {
+            Runtime.UpdateFrequency = UpdateFrequency.Update1;
+        }
+      } else if(argument == "RESET") {
+        Print("Reset", false);
+        persistent.load("");
+        elapsedMs = 0.0;
+        isSetupDone = false;
+        Runtime.UpdateFrequency = UpdateFrequency.None;
+      }
+  }
+
+  // Self update
+  if ((updateType & UpdateType.Update1) != 0) {
+      if(!persistent.running) {
+         Print("Not running", true);
+         elapsedMs = 0.0;
+       } else {
+         if(step++ % INTERVAL != 0) {
+           return;
+         }
+         Print("-- " + PREFIX + "(" + step + ") -- ", false);
+         double elapsedNow = elapsedMs;
+         elapsedMs = 0.0;
+         if(!primaryLogic(argument, elapsedNow)) {
+           disengage();
+           // We're done, stop running
+           persistent.running = false;
+           Runtime.UpdateFrequency = UpdateFrequency.None;
+         }
+       }
   }
 
   if(myLcd != null) {
