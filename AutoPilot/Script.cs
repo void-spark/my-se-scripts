@@ -81,15 +81,28 @@ public class Target {
   }
 }
 
-// TODO: Load only in constructor? Which means creating in it, not in setup.
 Persistent persistent;
 Target target;
 
-void Main(string argument, UpdateType updateType) {
+// Were we running when saved, in which case we want to setup on the first tick.
+bool loadrunning;
+
+public Program () {
+    persistent = new Persistent();
+    persistent.load(Storage);
+
+    // Continue if we were running when saving
+    if(persistent.running) {
+        loadrunning = true;
+        Runtime.UpdateFrequency = UpdateFrequency.Update1;
+    }
+}
+
+public void Main(string argument, UpdateType updateType) {
   elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
 
   // User, timer, etc. triggered us
-  if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
+  if (loadrunning || (updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
       if(!isSetupDone) {
         // Try to do inital setup, don't do this in the constructor, since we might want to redo it if the ship changed.
         // Which can be done using the 'RESET' command.
@@ -105,15 +118,13 @@ void Main(string argument, UpdateType updateType) {
       }
   }
 
-  persistent.load(Storage);
-
   // User, timer, etc. triggered us
   if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
       if(argument == "STOP") {
         disengage();
         Print("Emergency stop", false);
-        persistent.running = false;
         elapsedMs = 0.0;
+        persistent.running = false;
         Runtime.UpdateFrequency = UpdateFrequency.None;
       } else if(argument == "START") {
         Print("Starting", false);
@@ -122,17 +133,12 @@ void Main(string argument, UpdateType updateType) {
           Runtime.UpdateFrequency = UpdateFrequency.None;
           return;
         }
-        persistent.running = true;
         elapsedMs = 0.0;
+        persistent.running = true;
         Runtime.UpdateFrequency = UpdateFrequency.Update1;
       } else if(argument == "NEXT") {
         NextTarget();
         Print("Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
-      } else if(argument == "KEEPALIVE") {
-        Print("Keep alive, running: " + persistent.running + ", Target: " + target.name + "(" + persistent.tgtIndex + ")", false);
-        if(persistent.running) {
-            Runtime.UpdateFrequency = UpdateFrequency.Update1;
-        }
       } else if(argument == "RESET") {
         Print("Reset", false);
         persistent.load("");
@@ -166,8 +172,10 @@ void Main(string argument, UpdateType updateType) {
   if(myLcd != null) {
     myLcd.WritePublicText(lcdBuffer, false);
   }
+}
 
-  Storage = persistent.persist();
+public void Save() {
+    Storage = persistent.persist();
 }
 
 bool primaryLogic(string argument, double elapsedNow) {
@@ -439,9 +447,6 @@ public void SetControlThrusters(bool value) {
 public bool Setup() {
   Print("-- Setup --", false);
   step = 0;
-
-  persistent = new Persistent();
-  persistent.load(Storage);
 
   myLcd = FindFirstWithPrefixOrAny<IMyTextPanel>();
   if(myLcd != null) {
