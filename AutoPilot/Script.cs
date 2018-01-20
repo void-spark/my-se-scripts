@@ -18,7 +18,7 @@ MyPid pid;
 
 Vector3D lastPos;
 
-Dictionary<Vector3, List<ThrusterInfo>> _thrusters;
+Dictionary<Vector3, List<IMyThrust>> _thrusters;
 
 const string PREFIX = "AutoPilot";
 
@@ -362,12 +362,12 @@ public void setThrusters( ref Vector3D control ) {
     float leftControl = Math.Max(0.0f, (float)-control.X);
     float forwardControl = Math.Max(0.0f, (float)-control.Z);
     float backwardControl = Math.Max(0.0f, (float)control.Z);
-    _thrusters[up].ForEach(thruster => thruster.SetOverride(upControl * thruster.max));
-    _thrusters[down].ForEach(thruster => thruster.SetOverride(downControl * thruster.max));
-    _thrusters[left].ForEach(thruster => thruster.SetOverride(leftControl * thruster.max));
-    _thrusters[right].ForEach(thruster => thruster.SetOverride(rightControl * thruster.max));
-    _thrusters[forward].ForEach(thruster => thruster.SetOverride(forwardControl * thruster.max));
-    _thrusters[backward].ForEach(thruster => thruster.SetOverride(backwardControl * thruster.max));
+    _thrusters[up].ForEach(thruster => thruster.ThrustOverridePercentage = upControl);
+    _thrusters[down].ForEach(thruster => thruster.ThrustOverridePercentage = downControl);
+    _thrusters[left].ForEach(thruster => thruster.ThrustOverridePercentage = leftControl);
+    _thrusters[right].ForEach(thruster => thruster.ThrustOverridePercentage = rightControl);
+    _thrusters[forward].ForEach(thruster => thruster.ThrustOverridePercentage = forwardControl);
+    _thrusters[backward].ForEach(thruster => thruster.ThrustOverridePercentage = backwardControl);
 }
 
 public void controlGyros(ref Vector3D targetDown, ref Nullable<Vector3D> targetForward) {
@@ -523,21 +523,21 @@ public bool Setup() {
   target = new Target(targets[persistent.tgtIndex]);
   dockingApproach = target.docking;
 
-  _thrusters = new Dictionary<Vector3, List<ThrusterInfo>>();
+  _thrusters = new Dictionary<Vector3, List<IMyThrust>>();
 
-  _thrusters[up] = new List<ThrusterInfo>();
-  _thrusters[down] = new List<ThrusterInfo>();
-  _thrusters[left] = new List<ThrusterInfo>();
-  _thrusters[right] = new List<ThrusterInfo>();
-  _thrusters[forward] = new List<ThrusterInfo>();
-  _thrusters[backward] = new List<ThrusterInfo>();
+  _thrusters[up] = new List<IMyThrust>();
+  _thrusters[down] = new List<IMyThrust>();
+  _thrusters[left] = new List<IMyThrust>();
+  _thrusters[right] = new List<IMyThrust>();
+  _thrusters[forward] = new List<IMyThrust>();
+  _thrusters[backward] = new List<IMyThrust>();
 
   for (int i = 0; i < thrusters.Count; ++i) {
     IMyThrust thruster = thrusters[i];
     Matrix fromThrusterToGrid;
     thruster.Orientation.GetMatrix(out fromThrusterToGrid);
     Vector3 accelerationDirection = Vector3.Transform(fromThrusterToGrid.Backward, fromGridToReference);
-    _thrusters[accelerationDirection].Add(new ThrusterInfo(thruster));
+    _thrusters[accelerationDirection].Add(thruster);
   }
 
   lastPos = myRemote.GetPosition();
@@ -620,22 +620,6 @@ public T FindFirst<T>() where T: class {
     return (T)list[0];
   }
   return default(T);
-}
-
-public struct ThrusterInfo {
-  public float min;
-  public float max;
-  public IMyThrust thruster;
-
-  public ThrusterInfo(IMyThrust thruster) {
-    this.thruster = thruster;
-    this.min = thruster.GetMinimum<float>("Override");
-    this.max = thruster.GetMaximum<float>("Override");
-  }
-
-  public void SetOverride(float value) {
-    thruster.SetValueFloat("Override", value);
-  }
 }
 
 public struct GyroInfo {
