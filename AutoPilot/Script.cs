@@ -88,6 +88,32 @@ Target target;
 bool loadrunning;
 
 public Program () {
+    if(String.IsNullOrWhiteSpace(Me.CustomData)) {
+        Me.CustomData =
+            "GPS:NAV1:13505.1:143686.8:-108313.36:\r\n" +
+            "GPS:CONN_1:13534.84:143649.95:-108380.27:\r\n" +
+            "\r\n" +
+            "//GPS:NAV1:-43345.54:-20007.78:37797.06:\r\n" +
+            "//GPS:NAV2:-46849.63:-17410.13:38084.17:\r\n" +
+            "//GPS:NAV3:-50178.06:-10798.46:34745.96:\r\n" +
+            "//GPS:CONN_MESA:-50139.2:-10769.9:34651.28:\r\n" +
+            "\r\n" +
+            "//GPS:NAV3:-50178.06:-10798.46:34745.96:\r\n" +
+            "//GPS:NAV2:-46849.63:-17410.13:38084.17:\r\n" +
+            "//GPS:NAV1:-43345.54:-20007.78:37797.06:\r\n" +
+            "//GPS:CONN_BR:-43332.44:-20002.64:37760.94:\r\n" +
+            "\r\n" +
+            "//GPS:TEST1:-43345.57:-20039.8:37776.12:\r\n" +
+            "//GPS:TEST2:-42841.2:-22348.01:38199.66:\r\n" +
+            "//GPS:TEST3:-42503.44:-20779.72:40073.23:\r\n" +
+            "//GPS:TEST1:-43345.57:-20039.8:37776.12:\r\n" +
+            "\r\n" +
+            "//GPS:TEST1:-43345.57:-20039.8:37776.12:\r\n" +
+            "//GPS:CONN_BR:-43332.44:-20002.64:37760.94:\r\n";
+    }
+
+    targets = new List<String>();
+
     persistent = new Persistent();
     persistent.load(Storage);
 
@@ -498,28 +524,13 @@ public bool Setup() {
   GridTerminalSystem.GetBlocksOfType<IMyGyro>(list, x => x.CubeGrid == Me.CubeGrid);
   gyroInfos = list.ConvertAll(x => new GyroInfo((IMyGyro)x));
 
-  targets = new List<String>();
-
-  targets.Add("GPS:NAV1:13505.1:143686.8:-108313.36:");
-  targets.Add("GPS:CONN_1:13534.84:143649.95:-108380.27:");
-
-//  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
-//  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
-//  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
-//  targets.Add("GPS:CONN_MESA:-50139.2:-10769.9:34651.28:");
-
-//  targets.Add("GPS:NAV3:-50178.06:-10798.46:34745.96:");
-//  targets.Add("GPS:NAV2:-46849.63:-17410.13:38084.17:");
-//  targets.Add("GPS:NAV1:-43345.54:-20007.78:37797.06:");
-//  targets.Add("GPS:CONN_BR:-43332.44:-20002.64:37760.94:");
-
-//  targets.Add("GPS:TEST1:-43345.57:-20039.8:37776.12:");
-//  targets.Add("GPS:TEST2:-42841.2:-22348.01:38199.66:");
-//  targets.Add("GPS:TEST3:-42503.44:-20779.72:40073.23:");
-//  targets.Add("GPS:TEST1:-43345.57:-20039.8:37776.12:");
-
-//  targets.Add("GPS:TEST1:-43345.57:-20039.8:37776.12:");
-//  targets.Add("GPS:CONN_BR:-43332.44:-20002.64:37760.94:");
+  targets.Clear();
+  String[] parts = System.Text.RegularExpressions.Regex.Split(Me.CustomData, "\r\n");
+  Array.ForEach(parts, p => {
+      if(!String.IsNullOrWhiteSpace(p) && !p.Trim().StartsWith("//")) {
+          targets.Add(p.Trim());
+      };
+  });
 
   target = new Target(targets[persistent.tgtIndex]);
   dockingApproach = target.docking;
