@@ -183,8 +183,8 @@ bool primaryLogic(string argument, double elapsedNow) {
   Print("Elapsed MS: " +  elapsedNow, true );
   Print("Remote: " + (myRemote != null), true );
   Print("Gyros: " + gyroInfos.Count + ", Thrusters: " + thrusters.Count, true );
-  Print("Remote: " + GetGridPos(myRemote), true );
-  Print("Connector: " + GetGridPos(myConnector), true );
+  Print("Remote: " + ToString(myRemote.Position), true );
+  Print("Connector: " + ToString(myConnector.Position), true );
 
   Print(
     "Thrusters F: " + thrusterCount(forward) +
@@ -198,7 +198,7 @@ bool primaryLogic(string argument, double elapsedNow) {
   SetDampeners( false );
 
   location = myRemote.GetPosition();
-  Print("Position: " + new MyVectD(location), true);
+  Print("Position: " + ToString(location), true);
 
   // Only do stuff if time has passed, otherwise we get NaN's and such (and our last position will still be 0,0,0)
   if(elapsedNow != 0.0) {
@@ -244,7 +244,7 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
     TerminalBlockExtentions.ApplyAction(myConnector,"OnOff");
   }
 
-  Print("TGT: ("+target.name+") " + new MyVectD(target.loc), true );
+  Print("TGT: ("+target.name+") " + ToString(target.loc), true );
 
   double margin;
   Vector3D diff;
@@ -265,7 +265,7 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
   }
 
   Vector3D diffLocal = Vector3D.Transform(diff, toShipRot);
-  Print("delta Local: " + new MyVectD(diffLocal), true);
+  Print("delta Local: " + ToString(diffLocal), true);
   double distance = diffLocal.Length();
   Print("Target distance: " + distance, true);
   if(!dockPart2 && distance < margin) {
@@ -336,34 +336,32 @@ public void controlThrusters(ref Vector3D speedLocal, ref Vector3D targetSpeedLo
   Print("M M/S: " + speedLocal.Length(), true);
   Print("T M/S: " + targetSpeedLocal.Length(), true);
 
-  Print("M M/S: " + new MyVectD(speedLocal), true);
-  Print("T M/S: " + new MyVectD(targetSpeedLocal), true);
+  Print("M M/S: " + ToString(speedLocal), true);
+  Print("T M/S: " + ToString(targetSpeedLocal), true);
 
-  Vector3D ctrl;
+  Vector3D control;
 
-  pid.step(ref speedLocal, ref targetSpeedLocal, elapsedNow / 1000.0, out ctrl);
+  pid.step(ref speedLocal, ref targetSpeedLocal, elapsedNow / 1000.0, out control);
   Vector3D error = pid.getPreviousError();
 
-  Print("ERR: " + new MyVectD(error), true);
-  Print("I: " + new MyVectD(pid.getIntegral()), true);
-  Print("CTRL: " + new MyVectD(ctrl), true);
+  Print("ERR: " + ToString(error), true);
+  Print("I: " + ToString(pid.getIntegral()), true);
+  Print("CTRL: " + ToString(control), true);
 
-  MyVectF control = new MyVectF(ctrl);
-
-  Print("Up thrust: " + control.y, true );
+  Print("Up thrust: " + control.Y, true );
 
   setThrusters(ref control);
 }
 
 // Should be a Vector with each component at most 1.0 (so length can be > 1.0).
-public void setThrusters( ref MyVectF control ) {
+public void setThrusters( ref Vector3D control ) {
 // Instead one list of thruster classes, and each has a direction field
-    float upControl = Math.Max(0.0f, control.y);
-    float downControl = Math.Max(0.0f, -control.y);
-    float rightControl = Math.Max(0.0f, control.x);
-    float leftControl = Math.Max(0.0f, -control.x);
-    float forwardControl = Math.Max(0.0f, -control.z);
-    float backwardControl = Math.Max(0.0f, control.z);
+    float upControl = Math.Max(0.0f, (float)control.Y);
+    float downControl = Math.Max(0.0f, (float)-control.Y);
+    float rightControl = Math.Max(0.0f, (float)control.X);
+    float leftControl = Math.Max(0.0f, (float)-control.X);
+    float forwardControl = Math.Max(0.0f, (float)-control.Z);
+    float backwardControl = Math.Max(0.0f, (float)control.Z);
     _thrusters[up].ForEach(thruster => thruster.SetOverride(upControl * thruster.max));
     _thrusters[down].ForEach(thruster => thruster.SetOverride(downControl * thruster.max));
     _thrusters[left].ForEach(thruster => thruster.SetOverride(leftControl * thruster.max));
@@ -695,89 +693,25 @@ public static void GetChangeInPose(Vector3 indicator1, Vector3 indicator2, Vecto
   rotation.GetAxisAngle(out rotationAxis, out angle);
 }
 
-public MyVectI GetGridPos(IMyTerminalBlock block) {
-  return new MyVectI(block.Position);
+public string ToString(Vector3 value) {
+  return String.Format("{0:F3}, {1:F3}, {2:F3}", value.X, value.Y, value.Z);
 }
 
-public MyVectD GetWorldPos(IMyTerminalBlock block) {
-  return new MyVectD(block.GetPosition());
+public string ToGpsString(string name, Vector3 value) {
+  return String.Format("GPS:{0}:{1:F2}:{2:F2}:{3:F2}:", name, value.X, value.Y, value.Z);
 }
 
-public struct MyVectI {
-  public int x;
-  public int y;
-  public int z;
-
-  public MyVectI(Vector3I v) {
-    Vector3D vDouble = new Vector3D(v);
-    x = (int)  Math.Round(vDouble.GetDim(0));
-    y = (int)  Math.Round(vDouble.GetDim(1));
-    z = (int)  Math.Round(vDouble.GetDim(2));
-  }
-
-  public MyVectI(int x, int y, int z) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-  }
-
-  public override string ToString(){
-    return String.Format("{0:D}, {1:D}, {2:D}", x, y, z);
-  }
+public string ToString(Vector3I value) {
+  return String.Format("{0:D}, {1:D}, {2:D}", value.X, value.Y, value.Z);
 }
 
-public struct MyVectF {
-  public float x;
-  public float y;
-  public float z;
-
-public MyVectF(Vector3 v) {
-    this.x = v.GetDim(0);
-    this.y = v.GetDim(1);
-    this.z = v.GetDim(2);
-  }
-
-  public MyVectF(float x, float y, float z) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-  }
-
-  public override string ToString(){
-    return String.Format("{0:F3}, {1:F3}, {2:F3}", x, y, z);
-  }
-
-  public String ToGpsString(String name){
-    return String.Format("GPS:{0}:{1:F2}:{2:F2}:{3:F2}:", name, x, y, z);
-  }
+public string ToString(Vector3D value) {
+  return String.Format("{0:F3}, {1:F3}, {2:F3}", value.X, value.Y, value.Z);
 }
 
-public struct MyVectD {
-  public double x;
-  public double y;
-  public double z;
-
-  public MyVectD(Vector3D v) {
-    this.x = v.GetDim(0);
-    this.y = v.GetDim(1);
-    this.z = v.GetDim(2);
-  }
-
-  public MyVectD(double x, double y, double z) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-  }
-
-  public override string ToString(){
-    return String.Format("{0:F3}, {1:F3}, {2:F3}", x, y, z);
-  }
-
-  public String ToGpsString(String name){
-    return String.Format("GPS:{0}:{1:F2}:{2:F2}:{3:F2}:", name, x, y, z);
-  }
+public string ToGpsString(string name, Vector3D value){
+  return String.Format("GPS:{0}:{1:F2}:{2:F2}:{3:F2}:", name, value.X, value.Y, value.Z);
 }
-
 
 public class MyPid {
 
@@ -823,13 +757,13 @@ public class MyPid {
   }
 }
 
+// Use ILSpy to get API's
 // https://gist.github.com/ZerothAngel/da177f8a02347ac252b9
 // http://forum.keenswh.com/threads/aligning-ship-to-planet-gravity.7373513/
 // http://forum.keenswh.com/threads/ingame-programming-missing-api-and-functions-and-known-issues.7358476/
 // https://en.wikipedia.org/wiki/PID_controller
 // http://forum.unity3d.com/threads/spaceship-control-using-pid-controllers.191755/
 // http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-reset-windup/
-// https://github.com/KeenSoftwareHouse/SpaceEngineers/tree/master/Sources/VRage.Math
 // http://forum.keenswh.com/threads/rotation-script.7376458/
 // https://github.com/Sibz/YASEL/blob/master/YASEL/Extensions/GyroExtensions.cs
 // http://forum.keenswh.com/threads/gravity-aware-rotation-solved.7376549/
