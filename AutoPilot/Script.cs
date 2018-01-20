@@ -326,8 +326,8 @@ public void NextTarget() {
 }
 
 public void disengage() {
-  thrusters.ForEach(thruster => thruster.SetValueFloat("Override", 0.0f));
-  gyroInfos.ForEach(gyroInfo => gyroInfo.gyro.SetValueBool("Override", false));
+  thrusters.ForEach(thruster => thruster.ThrustOverride = 0.0f);
+  ReleaseGyros();
   //SetControlThrusters( true );
   SetDampeners( true );
 }
@@ -394,7 +394,7 @@ public void controlGyros(ref Vector3D targetDown, ref Nullable<Vector3D> targetF
   } else {
     Print(String.Format("Off level: {0:F3}", MathHelper.ToDegrees(ang)), true);
     // Control speed to be proportional to distance (angle) we have left
-    float ctrl_vel = (ang/(float)Math.PI) * CTRL_COEFF;
+    float ctrl_vel = (ang/MathHelper.Pi) * CTRL_COEFF;
     SetGyros(rot,ctrl_vel);
   }
 }
@@ -405,19 +405,20 @@ public void SetGyros(Vector3 rotation, float velocity) {
     Vector3 rotLocal = Vector3.Transform(rotation, gyroInfo.shipToGyro);
 
     // Set strength to velocity (which should be 0.0 - 1.0)
-    rotLocal *= MathHelper.Clamp(gyroInfo.max * velocity, 0.01f, gyroInfo.max);
+    // Gyro MAX value should be TwoPi
+    rotLocal *= MathHelper.Clamp(MathHelper.TwoPi * velocity, 0.01f, MathHelper.TwoPi);
 
-    gyroInfo.gyro.SetValueFloat("Pitch",  (float)rotLocal.GetDim(0));
-    gyroInfo.gyro.SetValueFloat("Yaw",   -(float)rotLocal.GetDim(1));
-    gyroInfo.gyro.SetValueFloat("Roll",  -(float)rotLocal.GetDim(2));
+     gyroInfo.gyro.Pitch = -(float)rotLocal.X;
+     gyroInfo.gyro.Yaw = -(float)rotLocal.Y;
+     gyroInfo.gyro.Roll = -(float)rotLocal.Z;
 
-    gyroInfo.gyro.SetValueFloat("Power", 1.0f);
-    gyroInfo.gyro.SetValueBool("Override", true);
+    gyroInfo.gyro.GyroPower = 1.0f;
+    gyroInfo.gyro.GyroOverride = true;
   });
 }
 
 public void ReleaseGyros() {
-  gyroInfos.ForEach(gi => gi.gyro.SetValueBool("Override", false));
+  gyroInfos.ForEach(gi => gi.gyro.GyroOverride = false);
 }
 
 public String thrusterCount(Vector3 direction) {
@@ -623,7 +624,6 @@ public T FindFirst<T>() where T: class {
 }
 
 public struct GyroInfo {
-  public float max;
   public IMyGyro gyro;
   public Matrix shipToGyro;
 
@@ -633,9 +633,6 @@ public struct GyroInfo {
     Matrix idToGyro;
     gyro.Orientation.GetMatrix(out idToGyro);
     shipToGyro = shipOrient * Matrix.Transpose(idToGyro);
-
-    // Yup, we assume max/min is same in each direction.
-    this.max = gyro.GetMaximum<float>("Yaw");
   }
 }
 
