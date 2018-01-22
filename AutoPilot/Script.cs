@@ -1,4 +1,4 @@
-// Should we enable reactors on bootup
+// Should we enable reactors before flight
 bool ENABLE_REACTORS = false;
 
 // Each X'th time we're called to actually do something.
@@ -154,7 +154,7 @@ public void Main(string argument, UpdateType updateType) {
         Runtime.UpdateFrequency = UpdateFrequency.None;
       } else if(argument == "START") {
         Print("Starting", false);
-        if(!Bootup()) {
+        if(!SystemsBootup()) {
           // Bootup failed, don't continue
           Runtime.UpdateFrequency = UpdateFrequency.None;
           return;
@@ -264,10 +264,10 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
 // Unconnected: red/white , IsLocked = false, IsConnected = false
 
   if(myConnector.Status == MyShipConnectorStatus.Connected) {
-    TerminalBlockExtentions.ApplyAction(myConnector,"SwitchLock");
+    myConnector.ApplyAction("SwitchLock");
   }
   if(myConnector.Enabled != dockPart2) {
-    TerminalBlockExtentions.ApplyAction(myConnector,"OnOff");
+    myConnector.ApplyAction("OnOff");
   }
 
   Print("TGT: ("+target.name+") " + ToString(target.loc), true );
@@ -301,32 +301,13 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
       NextTarget();
     }
   } else if(dockPart2 && myConnector.Status == MyShipConnectorStatus.Connectable) {
-      TerminalBlockExtentions.ApplyAction(myConnector,"SwitchLock");
+      myConnector.ApplyAction("SwitchLock");
       Print("Connector status: " + myConnector.Status, true);
       Print("Docked", true);
 
       NextTarget();
 
-      for (int i = 0; i < thrusters.Count; ++i) {
-        IMyThrust thruster = thrusters[i];
-        if(thruster.Enabled) {
-          TerminalBlockExtentions.ApplyAction(thruster,"OnOff_Off");
-        }
-      }
-
-      for (int i = 0; i < gyroInfos.Count; ++i) {
-        IMyGyro gyro = gyroInfos[i].gyro;
-        if(gyro.Enabled) {
-          TerminalBlockExtentions.ApplyAction(gyro,"OnOff_Off");
-        }
-      }
-
-      for (int i = 0; i < batteries.Count; ++i) {
-        IMyBatteryBlock battery = batteries[i];
-        if(!BatteryIsCharging(battery)) {
-          TerminalBlockExtentions.ApplyAction(battery,"Recharge");
-        }
-      }
+      SystemsHibernate();
 
       return false;
   }
@@ -458,14 +439,14 @@ public String thrusterCount(Vector3 direction) {
 public void SetDampeners(bool value) {
     if(cockpit.DampenersOverride != value) {
       Print((value ? "Enable" : "Disable" ) + " dampeners", true);
-      TerminalBlockExtentions.ApplyAction(cockpit,"DampenersOverride");
+      cockpit.ApplyAction("DampenersOverride");
     }
 }
 
 public void SetControlThrusters(bool value) {
     if(cockpit.ControlThrusters != value) {
       Print((value ? "Enable" : "Disable" ) + " thruster control", true);
-      TerminalBlockExtentions.ApplyAction(cockpit,"ControlThrusters");
+      cockpit.ApplyAction("ControlThrusters");
     }
 }
 
@@ -559,46 +540,58 @@ public bool Setup() {
   return true;
 }
 
-bool Bootup() {
+// Make sure are critical systems are activated before flight.
+bool SystemsBootup() {
 
-  for (int i = 0; i < reactors.Count; ++i) {
-    IMyReactor reactor = reactors[i];
-    if(ENABLE_REACTORS && !reactor.Enabled) {
-      TerminalBlockExtentions.ApplyAction(reactor,"OnOff_On");
-    }
-  }
+    reactors.ForEach(reactor => {
+        if(ENABLE_REACTORS && !reactor.Enabled) {
+          reactor.ApplyAction("OnOff_On");
+        }
+    });
 
-  for (int i = 0; i < batteries.Count; ++i) {
-    IMyBatteryBlock battery = batteries[i];
-    if(!battery.Enabled) {
-      TerminalBlockExtentions.ApplyAction(battery,"OnOff_On");
-    }
-    if(BatteryIsCharging(battery)) {
-      TerminalBlockExtentions.ApplyAction(battery,"Recharge");
-    }
-  }
+    batteries.ForEach(battery => {
+        if(!battery.Enabled) {
+            battery.ApplyAction("OnOff_On");
+        }
+        if(battery.OnlyRecharge) {
+            battery.OnlyRecharge = false;
+        }
+    });
 
-  for (int i = 0; i < thrusters.Count; ++i) {
-    IMyThrust thruster = thrusters[i];
-    if(!thruster.Enabled) {
-      TerminalBlockExtentions.ApplyAction(thruster,"OnOff_On");
-    }
-  }
+    thrusters.ForEach(thruster => {
+        if(!thruster.Enabled) {
+            thruster.ApplyAction("OnOff_On");
+        }
+    });
 
-  for (int i = 0; i < gyroInfos.Count; ++i) {
-    IMyGyro gyro = gyroInfos[i].gyro;
-    if(!gyro.Enabled) {
-      TerminalBlockExtentions.ApplyAction(gyro,"OnOff_On");
-    }
-  }
-  return true;
+    gyroInfos.ForEach(gyroInfo => {
+        if(!gyroInfo.gyro.Enabled) {
+            gyroInfo.gyro.ApplyAction("OnOff_On");
+        }
+    });
+
+    return true;
 }
 
-bool BatteryIsCharging(IMyBatteryBlock batt) {
-    var builder = new StringBuilder();
-    batt.GetActionWithName("Recharge").WriteValue(batt, builder);
+// Hibernate system once docked, turn off anything we don't need while docked, and let the station supply us.
+void SystemsHibernate() {
+    thrusters.ForEach(thruster => {
+        if(thruster.Enabled) {
+            thruster.ApplyAction("OnOff_Off");
+        }
+    });
 
-    return builder.ToString() == "On";
+    gyroInfos.ForEach(gyroInfo => {
+        if(gyroInfo.gyro.Enabled) {
+            gyroInfo.gyro.ApplyAction("OnOff_Off");
+        }
+    });
+
+    batteries.ForEach(battery => {
+        if(!battery.OnlyRecharge) {
+            battery.OnlyRecharge = true;
+        }
+    });
 }
 
 public void Print( string str , bool append) {
