@@ -13,11 +13,9 @@ bool isSetupDone;
 
 Vector3D lastPos;
 Vector3D  lastSpeed;
-Vector3D  lastSpeed2; 
+Vector3D  lastSpeed2;
 
 Dictionary<Vector3, List<IMyThrust>> _thrusters;
-
-const string PREFIX = "AutoPilot";
 
 List<IMyThrust> thrusters;
 List<IMyBatteryBlock> batteries;
@@ -25,8 +23,6 @@ List<IMyReactor> reactors;
 
 String lcdBuffer;
 IMyTextPanel myLcd;
-IMyRemoteControl myRemote;
-IMyShipConnector myConnector;
 
 // Directions in ship coords, each with length 1.
 Vector3D up;
@@ -39,18 +35,22 @@ Vector3D backward;
 IMyCockpit cockpit;
 
 Vector3D location;
-Vector3D speed; 
+Vector3D speed;
 MatrixD toWorldRot;
 MatrixD toShipRot;
 static Matrix shipOrient;
 
-
 public Program () {
-  
 }
 
 public void Main(string argument, UpdateType updateType) {
-  elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
+
+    // Runtime.TimeSinceLastRun.Ticks seems to return 16ms with  UpdateFrequency.Update1,
+    // even though 16 2/3 ms would be the accurate value, like 16.666666666666666666666666666667 ms.
+    //elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
+    if(Runtime.TimeSinceLastRun.Ticks > 0) {
+        elapsedMs += (16f + 2f/3f);
+    }
 
   // User, timer, etc. triggered us
   if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
@@ -72,9 +72,9 @@ public void Main(string argument, UpdateType updateType) {
   // User, timer, etc. triggered us
   if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
       if(argument == "STOP") {
-        Print("Emergency stop", false);
         elapsedMs = 0.0;
         Runtime.UpdateFrequency = UpdateFrequency.None;
+        return;
       } else if(argument == "START") {
         Print("Starting", false);
         elapsedMs = 0.0;
@@ -92,7 +92,7 @@ public void Main(string argument, UpdateType updateType) {
          if(step++ % INTERVAL != 0) {
            return;
          }
-         Print("-- " + PREFIX + "(" + step + ") -- ", false);
+         Print("-- (" + step + ") -- ", false);
          double elapsedNow = elapsedMs;
          elapsedMs = 0.0;
          if(!primaryLogic(argument, elapsedNow)) {
@@ -108,61 +108,64 @@ public void Main(string argument, UpdateType updateType) {
 bool primaryLogic(string argument, double elapsedNow) {
 
   Print("Elapsed MS: " +  elapsedNow, true );
-  Print("Remote: " + (myRemote != null), true );
-  Print("Remote: " + myRemote.Position.ToString(), true );
-  Print("Connector: " + myConnector.Position.ToString(), true );
+  Print("Cockpit: " + cockpit.Position.ToString(), true );
 
-  Print( 
-    "Thrusters F: " + thrusterPow(forward) + 
-    ", B: " + thrusterPow(backward) + 
-    ", L: " + thrusterPow(left) + 
-    ", R: " + thrusterPow(right) + 
-    ", U: " + thrusterPow(up) + 
-    ", D: " + thrusterPow(down), true); 
+  Print(
+    "Thrusters F: " + thrusterPow(forward) +
+    ", B: " + thrusterPow(backward) +
+    ", L: " + thrusterPow(left) +
+    ", R: " + thrusterPow(right) +
+    ", U: " + thrusterPow(up) +
+    ", D: " + thrusterPow(down), true);
 
-    MyShipMass mass = myRemote.CalculateShipMass();
+    MyShipMass mass = cockpit.CalculateShipMass();
 
 
-	/// Gets the base mass of the ship.  
-  Print("BaseMass: " + mass.BaseMass, true ); 
-	/// Gets the total mass of the ship, including cargo.  
-  Print("TotalMass: " + mass.TotalMass, true );  
-	/// Gets the physical mass of the ship, which accounts for inventory multiplier.  
-  Print("PhysicalMass: " + mass.PhysicalMass, true );  
+	/// Gets the base mass of the ship.
+  Print("BaseMass: " + mass.BaseMass, true );
+	/// Gets the total mass of the ship, including cargo.
+  Print("TotalMass: " + mass.TotalMass, true );
+	/// Gets the physical mass of the ship, which accounts for inventory multiplier.
+  Print("PhysicalMass: " + mass.PhysicalMass, true );
 
-   location = myRemote.GetPosition();
+   location = cockpit.GetPosition();
   Print("Position: " + location.ToString(), true);
 
   // Only do stuff if time has passed, otherwise we get NaN's and such (and our last position will still be 0,0,0)
   if(elapsedNow != 0.0) {
-    toWorldRot = myRemote.WorldMatrix.GetOrientation();
+    toWorldRot = cockpit.WorldMatrix.GetOrientation();
     toShipRot = MatrixD.Transpose(toWorldRot);
 
-    Vector3D grav=myRemote.GetNaturalGravity();
+    Vector3D grav=cockpit.GetNaturalGravity();
 
     speed = (location - lastPos) * (1000.0 / elapsedNow);
     Vector3D speedLocal = Vector3D.Transform(speed, toShipRot);
 
-  Print("SpeedA: " + speed.Length(), true );    
-  Print("SpeedB: "  + myRemote.GetShipSpeed(), true );    
- // Print("SpeedA: " + ToString(speed), true );    
- // Print("SpeedB: "  + ToString(myRemote.GetShipVelocities().LinearVelocity), true );     
+  Print("SpeedA: " + speed.Length(), true );
+  Print("SpeedB: "  + cockpit.GetShipSpeed(), true );
+ // Print("SpeedA: " + ToString(speed), true );
+ // Print("SpeedB: "  + ToString(myRemote.GetShipVelocities().LinearVelocity), true );
 
 
-    Vector3D acc = (speed - lastSpeed) * (1000.0 / elapsedNow); 
-    Vector3D acc2 = (myRemote.GetShipVelocities().LinearVelocity - lastSpeed2) * (1000.0 / elapsedNow);  
+    Vector3D acc = (speed - lastSpeed) * (1000.0 / elapsedNow);
+    Vector3D acc2 = (cockpit.GetShipVelocities().LinearVelocity - lastSpeed2) * (1000.0 / elapsedNow);
 
-  //Print("AccA: " + acc.Length(), true );     
-//Print("AccB: " + acc.Length(), true );      
+  Print("AccA: " + acc.Length(), true );
+Print("AccB: " + acc.Length(), true );
 
-  Print("AccA: " + ToString(acc), true );      
-Print("AccB: " + ToString(acc), true );      
+float massVal = mass.PhysicalMass;
+float thrust = 0.0f;
+_thrusters[forward].ForEach(t => thrust += t.MaxEffectiveThrust);
+Print("AccE: " + (thrust / massVal), true );
+
+  Print("AccA: " + ToString(acc), true );
+Print("AccB: " + ToString(acc), true );
 
   }
 
   lastPos = location;
 lastSpeed = speed;
-lastSpeed2 = myRemote.GetShipVelocities().LinearVelocity;
+lastSpeed2 = cockpit.GetShipVelocities().LinearVelocity;
 
   return true;
 }
@@ -194,41 +197,25 @@ public String thrusterCount(Vector3 direction) {
   }
 }
 
-public String thrusterPow(Vector3 direction) { 
+public String thrusterPow(Vector3 direction) {
   if(_thrusters.ContainsKey(direction)) {
     float totMaxEffectiveThrust = 0;
-    _thrusters[direction].ForEach(t => totMaxEffectiveThrust += t.MaxEffectiveThrust); 
+    _thrusters[direction].ForEach(t => totMaxEffectiveThrust += t.MaxEffectiveThrust);
 totMaxEffectiveThrust /= 1000.0f;
     return totMaxEffectiveThrust.ToString() + "kN";
-  } else { 
-    return "None"; 
-  } 
-} 
-
-
-
- 
+  } else {
+    return "None";
+  }
+}
 
 public bool Setup() {
   Print("-- Setup --", false);
   step = 0;
 
-  myLcd = FindFirstWithPrefixOrAny<IMyTextPanel>();
+  myLcd = FindFirst<IMyTextPanel>();
   if(myLcd != null) {
     myLcd.ShowPublicTextOnScreen();
     myLcd.SetValueFloat("FontSize", 1.0f);
-  }
-
-  myRemote = FindFirstWithPrefixOrAny<IMyRemoteControl>();
-  if(myRemote == null) {
-    Print("Remote not found!", true);
-    return false;
-  }
-
-  myConnector = FindFirstWithPrefixOrAny<IMyShipConnector>();
-  if(myConnector == null) {
-    Print("Connector not found!", true);
-    return false;
   }
 
   cockpit = FindFirst<IMyCockpit>();
@@ -237,10 +224,10 @@ public bool Setup() {
     return false;
   }
 
-  myRemote.Orientation.GetMatrix(out shipOrient);
+  cockpit.Orientation.GetMatrix(out shipOrient);
 
   Matrix fromGridToReference;
-  myRemote.Orientation.GetMatrix(out fromGridToReference);
+  cockpit.Orientation.GetMatrix(out fromGridToReference);
   Matrix.Transpose(ref fromGridToReference, out fromGridToReference);
 
   up = shipOrient.Up;
@@ -278,7 +265,7 @@ public bool Setup() {
     _thrusters[accelerationDirection].Add(thruster);
   }
 
-  lastPos = myRemote.GetPosition();
+  lastPos = cockpit.GetPosition();
 
   return true;
 }
@@ -290,22 +277,6 @@ public void Print( string str , bool append) {
   } else {
     lcdBuffer += str + "\r\n";
   }
-}
-
-public T FindFirstWithPrefixOrAny<T>() where T: class {
-  T result = FindFirstWithPrefix<T>(PREFIX);
-  return result != null ? result : FindFirst<T>();
-}
-
-public T FindFirstWithPrefix<T>(String prefix) where T: class {
-  var list = new List<IMyTerminalBlock>();
-  GridTerminalSystem.GetBlocksOfType<T>(list, x => x.CubeGrid == Me.CubeGrid);
-  for(int pos = 0; pos < list.Count; pos++) {
-    if(list[pos].CustomName.StartsWith(prefix)) {
-      return (T)list[pos];
-    }
-  }
-  return default(T);
 }
 
 public T FindFirst<T>() where T: class {
@@ -321,6 +292,3 @@ public T FindFirst<T>() where T: class {
 public string ToString(Vector3D value) {
   return String.Format("{0:F3}, {1:F3}, {2:F3}", value.X, value.Y, value.Z);
 }
-
-
-
