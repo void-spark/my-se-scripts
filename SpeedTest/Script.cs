@@ -21,8 +21,13 @@ List<IMyThrust> thrusters;
 Dictionary<Vector3, List<IMyThrust>> _thrusters;
 
 static Matrix shipOrient;
+
+// The game ticks since we started, or the last restart.
 long ticks;
+
+// The game ticks per second.
 long ticksPerSecond = 60;
+
 
 public Program() {
     ticks = 0;
@@ -32,12 +37,11 @@ public Program() {
 
 public void Main(string argument, UpdateType updateType) {
 
-    // Runtime.TimeSinceLastRun.Ticks seems to return 16ms with  UpdateFrequency.Update1,
-    // even though 16 2/3 ms would be the accurate value, like 16.666666666666666666666666666667 ms.
-    // So just count game ticks instead, like the olden days.
-    if(Runtime.TimeSinceLastRun.Ticks > 0) {
-        ticks += 1;
-    }
+    // Runtime.TimeSinceLastRun.Ticks returns 160000 for each game tick, which is 16ms according to TimeSpan.
+    // But 1/60 of a second would be 16 2/3 ms.
+    // Since in this script we only want game ticks, we just divide by 160000.
+    ticks += Runtime.TimeSinceLastRun.Ticks / 160000;
+
     Echo("T:" + ticks.ToString());
     Echo("dT:" + Runtime.TimeSinceLastRun.Ticks);
 
