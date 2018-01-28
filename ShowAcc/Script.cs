@@ -45,29 +45,29 @@ public Program () {
 
 public void Main(string argument, UpdateType updateType) {
 
-    // Runtime.TimeSinceLastRun.Ticks seems to return 16ms with  UpdateFrequency.Update1,
-    // even though 16 2/3 ms would be the accurate value, like 16.666666666666666666666666666667 ms.
-    //elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
-    if(Runtime.TimeSinceLastRun.Ticks > 0) {
-        elapsedMs += (16f + 2f/3f);
-    }
+    // Runtime.TimeSinceLastRun.Ticks returns 160000 for each game tick, which is 16ms according to TimeSpan.
+    // But 1/60 of a second would be 16 2/3 ms.
+    // That means each second is only reported as 0.96 second. To fix this we must multiply by 1+1/24.
+    long millis = Runtime.TimeSinceLastRun.Ticks / TimeSpan.TicksPerMillisecond;
+    double millisCorrected = millis + millis / 24.0;
+    elapsedMs += millisCorrected;
 
-  // User, timer, etc. triggered us
-  if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
-      if(!isSetupDone) {
-        // Try to do inital setup, don't do this in the constructor, since we might want to redo it if the ship changed.
-        // Which can be done using the 'RESET' command.
-        isSetupDone = Setup();
+    // User, timer, etc. triggered us
+    if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
         if(!isSetupDone) {
-          // Setup failed, don't continue
-          if(myLcd != null) {
-            myLcd.WritePublicText(lcdBuffer, false);
-          }
-          Runtime.UpdateFrequency = UpdateFrequency.None;
-          return;
+            // Try to do inital setup, don't do this in the constructor, since we might want to redo it if the ship changed.
+            // Which can be done using the 'RESET' command.
+            isSetupDone = Setup();
+            if(!isSetupDone) {
+                // Setup failed, don't continue
+                if(myLcd != null) {
+                    myLcd.WritePublicText(lcdBuffer, false);
+                }
+                Runtime.UpdateFrequency = UpdateFrequency.None;
+                return;
+            }
         }
-      }
-  }
+    }
 
   // User, timer, etc. triggered us
   if ((updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
@@ -121,53 +121,52 @@ bool primaryLogic(string argument, double elapsedNow) {
     MyShipMass mass = cockpit.CalculateShipMass();
 
 
-	/// Gets the base mass of the ship.
-  Print("BaseMass: " + mass.BaseMass, true );
-	/// Gets the total mass of the ship, including cargo.
-  Print("TotalMass: " + mass.TotalMass, true );
-	/// Gets the physical mass of the ship, which accounts for inventory multiplier.
-  Print("PhysicalMass: " + mass.PhysicalMass, true );
+    /// Gets the base mass of the ship.
+    Print("BaseMass: " + mass.BaseMass, true );
+    /// Gets the total mass of the ship, including cargo.
+    Print("TotalMass: " + mass.TotalMass, true );
+    /// Gets the physical mass of the ship, which accounts for inventory multiplier.
+    Print("PhysicalMass: " + mass.PhysicalMass, true );
 
-   location = cockpit.GetPosition();
-  Print("Position: " + location.ToString(), true);
+    location = cockpit.GetPosition();
+    Print("Position: " + location.ToString(), true);
 
-  // Only do stuff if time has passed, otherwise we get NaN's and such (and our last position will still be 0,0,0)
-  if(elapsedNow != 0.0) {
-    toWorldRot = cockpit.WorldMatrix.GetOrientation();
-    toShipRot = MatrixD.Transpose(toWorldRot);
+    // Only do stuff if time has passed, otherwise we get NaN's and such (and our last position will still be 0,0,0)
+    if(elapsedNow != 0.0) {
+        toWorldRot = cockpit.WorldMatrix.GetOrientation();
+        toShipRot = MatrixD.Transpose(toWorldRot);
 
-    Vector3D grav=cockpit.GetNaturalGravity();
+        Vector3D grav=cockpit.GetNaturalGravity();
 
-    speed = (location - lastPos) * (1000.0 / elapsedNow);
-    Vector3D speedLocal = Vector3D.Transform(speed, toShipRot);
+        speed = (location - lastPos) * (1000.0 / elapsedNow);
+        Vector3D speedLocal = Vector3D.Transform(speed, toShipRot);
 
-  Print("SpeedA: " + speed.Length(), true );
-  Print("SpeedB: "  + cockpit.GetShipSpeed(), true );
- // Print("SpeedA: " + ToString(speed), true );
- // Print("SpeedB: "  + ToString(myRemote.GetShipVelocities().LinearVelocity), true );
+        Print("SpeedA: " + speed.Length(), true );
+        Print("SpeedB: "  + cockpit.GetShipSpeed(), true );
+        // Print("SpeedA: " + ToString(speed), true );
+        // Print("SpeedB: "  + ToString(myRemote.GetShipVelocities().LinearVelocity), true );
 
 
-    Vector3D acc = (speed - lastSpeed) * (1000.0 / elapsedNow);
-    Vector3D acc2 = (cockpit.GetShipVelocities().LinearVelocity - lastSpeed2) * (1000.0 / elapsedNow);
+        Vector3D acc = (speed - lastSpeed) * (1000.0 / elapsedNow);
+        Vector3D acc2 = (cockpit.GetShipVelocities().LinearVelocity - lastSpeed2) * (1000.0 / elapsedNow);
 
-  Print("AccA: " + acc.Length(), true );
-Print("AccB: " + acc.Length(), true );
+        Print("AccA: " + acc.Length(), true );
+        Print("AccB: " + acc2.Length(), true );
 
-float massVal = mass.PhysicalMass;
-float thrust = 0.0f;
-_thrusters[forward].ForEach(t => thrust += t.MaxEffectiveThrust);
-Print("AccE: " + (thrust / massVal), true );
+        float massVal = mass.PhysicalMass;
+        float thrust = 0.0f;
+        _thrusters[forward].ForEach(t => thrust += t.MaxEffectiveThrust);
+        Print("AccE: " + (thrust / massVal), true );
 
-  Print("AccA: " + ToString(acc), true );
-Print("AccB: " + ToString(acc), true );
+        Print("AccA: " + ToString(acc), true );
+        Print("AccB: " + ToString(acc2), true );
+    }
 
-  }
+    lastPos = location;
+    lastSpeed = speed;
+    lastSpeed2 = cockpit.GetShipVelocities().LinearVelocity;
 
-  lastPos = location;
-lastSpeed = speed;
-lastSpeed2 = cockpit.GetShipVelocities().LinearVelocity;
-
-  return true;
+    return true;
 }
 
 
