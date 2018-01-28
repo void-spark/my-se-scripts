@@ -1,4 +1,4 @@
-// Should we enable reactors before flight
+﻿// Should we enable reactors before flight
 bool ENABLE_REACTORS = false;
 
 // Each X'th time we're called to actually do something.
@@ -214,19 +214,16 @@ public void Save() {
 
 bool primaryLogic(string argument, double elapsedNow) {
 
-  Print("Elapsed MS: " +  elapsedNow, true );
-  Print("Remote: " + (myRemote != null), true );
-  Print("Gyros: " + gyroInfos.Count + ", Thrusters: " + thrusters.Count, true );
-  Print("Remote: " + ToString(myRemote.Position), true );
-  Print("Connector: " + ToString(myConnector.Position), true );
-
-  Print(
-    "Thrusters F: " + thrusterCount(forward) +
-    ", B: " + thrusterCount(backward) +
-    ", L: " + thrusterCount(left) +
-    ", R: " + thrusterCount(right) +
-    ", U: " + thrusterCount(up) +
-    ", D: " + thrusterCount(down), true);
+    Print("Elapsed MS: " +  elapsedNow, true );
+    Print("Remote: " + ToString(myRemote.Position), true );
+    Print("Connector: " + ToString(myConnector.Position), true );
+    Print("Gyros: " + gyroInfos.Count + ", Thrusters: " + thrusters.Count, true );
+    Print("F: " + thrusterPowerStr(forward) +
+        ", B: " + thrusterPowerStr(backward) +
+        ", L: " + thrusterPowerStr(left) +
+        ", R: " + thrusterPowerStr(right), true);
+    Print("U: " + thrusterPowerStr(up) +
+        ", D: " + thrusterPowerStr(down), true);
 
   //SetControlThrusters( false );
   cockpit.DampenersOverride = false;
@@ -452,6 +449,18 @@ public String thrusterCount(Vector3 direction) {
   } else {
     return "None";
   }
+}
+
+public float thrusterPower(Vector3 direction) {
+    float totMaxEffectiveThrust = 0.0f;
+    if(_thrusters.ContainsKey(direction)) {
+        _thrusters[direction].ForEach(t => totMaxEffectiveThrust += t.MaxEffectiveThrust);
+    }
+    return totMaxEffectiveThrust;
+}
+
+public String thrusterPowerStr(Vector3 direction) {
+    return (thrusterPower(direction) / 1000.0f).ToString() + "kN";
 }
 
 public void SetControlThrusters(bool value) {
