@@ -1,0 +1,38 @@
+Initially, I just assumed a ship would be able to stop in 2km, and calculated the target acceleration on that.
+http://www.dummies.com/education/science/physics/how-to-calculate-acceleration/
+
+Calculate our target acceleration, We want to go from 0 to 100 m/s in 2000 meters:
+a = 2d / t^2
+v = a * t
+t = v/a
+a = 2d / (v/a)^2
+a * (v/a) * (v/a) = 2d
+a * (v^2 / a^2) = 2d
+v^2 / a = 2d
+a = v^2 / 2d
+double targetAcceleration = Math.Pow(100.0, 2.0) / (2.0 * 2000.0);
+
+Then we calculate our target speed, based on the distance from the target, assuming we have a constant acc/deceleration
+over the 2k.
+// Calculate speed at the current position.
+// Distance when starting at 0 velocity is: (1/2) * a * t^2
+// v = a * t
+// d = (1/2) * a * t^2
+// 2 * d = a * t^2
+// (2 * d) / a = t^2
+// t = sqrt ( (2 * d) / a)
+// v = a * sqrt ( (2 * d) / a)
+// v = a * sqrt(2*d) / sqrt(a)
+// v = a * (sqrt(2*d) / sqrt(a)) * (sqrt(a) / sqrt(a)) = a * (sqrt(2*d) * sqrt(a)) / a
+// v = sqrt(2*d) * sqrt(a)
+// v = sqrt(2*d*a)
+double targetSpeed = Math.Sqrt(2 * targetAcceleration * limitedDistance);
+
+
+Some early acceleration notes:
+// Near 500m, 70335kg, 2* 400kN?
+//One newton is the force needed to accelerate one kilogram of mass at the rate of one metre per second squared in direction of the applied force.
+// 2*400kN / 70335kg = 11.374138053600625577592948034407 m/s, dist = 439.6, in 8.79s
+
+// 12acc at 73000 ish, calc says more like 10.9589, but let's look up effective thrust?
+// 12.8-13.0 ish at 67266ish?, should be 11.893 Normalized, ice out of oxygens, set only the forward thrusters to max blast.

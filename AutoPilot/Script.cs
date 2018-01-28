@@ -51,6 +51,8 @@ MatrixD toShipRot;
 static Matrix shipOrient;
 
 List<String> targets;
+
+// We are flying to a NAV where we will dock, before we actually start docking.
 bool dockingApproach;
 
 public class Persistent {
@@ -125,7 +127,13 @@ public Program () {
 }
 
 public void Main(string argument, UpdateType updateType) {
-  elapsedMs += Runtime.TimeSinceLastRun.TotalMilliseconds;
+
+    // Runtime.TimeSinceLastRun.Ticks returns 160000 for each game tick, which is 16ms according to TimeSpan.
+    // But 1/60 of a second would be 16 2/3 ms.
+    // That means each second is only reported as 0.96 second. To fix this we must multiply by 1+1/24.
+    long millis = Runtime.TimeSinceLastRun.Ticks / TimeSpan.TicksPerMillisecond;
+    double millisCorrected = millis + millis / 24.0;
+    elapsedMs += millisCorrected;
 
   // User, timer, etc. triggered us
   if (loadrunning || (updateType & (UpdateType.Trigger | UpdateType.Terminal)) != 0) {
@@ -221,7 +229,7 @@ bool primaryLogic(string argument, double elapsedNow) {
     ", D: " + thrusterCount(down), true);
 
   //SetControlThrusters( false );
-  SetDampeners( false );
+  cockpit.DampenersOverride = false;
 
   location = myRemote.GetPosition();
   Print("Position: " + ToString(location), true);
@@ -256,21 +264,27 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
   heading = null;
   targetSpeedLocal = default(Vector3D);
 
+  Print("TGT: (" + target.name + ") " + ToString(target.loc), true );
+
+  // Are we flying to a docking nav, but we haven't started the docking yet?
   bool dockPart1 = target.docking && dockingApproach;
+
+  // Are we at a docking nav, where we have started docking?
   bool dockPart2 = target.docking && !dockingApproach;
 
-// Connected: green/Locked  IsLocked = true, IsConnected = true
-// Connectable: yellow or cyan, ready to lock,  IsLocked = true, IsConnected = false
-// Unconnected: red/white , IsLocked = false, IsConnected = false
+  // Connected: green/Locked  IsLocked = true, IsConnected = true
+  // Connectable: yellow or cyan, ready to lock,  IsLocked = true, IsConnected = false
+  // Unconnected: red/white , IsLocked = false, IsConnected = false
 
+  // If we are connected, disconnect. This works since our method is only called when we are maneuvering
   if(myConnector.Status == MyShipConnectorStatus.Connected) {
     myConnector.ApplyAction("SwitchLock");
   }
+
+  // Only enable the connector if we are actually in a docking procedure, otherwise keep it disabled.
   if(myConnector.Enabled != dockPart2) {
     myConnector.ApplyAction("OnOff");
   }
-
-  Print("TGT: ("+target.name+") " + ToString(target.loc), true );
 
   double margin;
   Vector3D diff;
@@ -313,8 +327,12 @@ public bool logic(ref Vector3D grav, ref Vector3D speedLocal, out Nullable<Vecto
   }
 
   Vector3D targetDirectionLocal = Vector3D.Normalize(diffLocal);
+
+  // Calculate our target acceleration, We want to go from 0 to 100 m/s in 2000 meters.
   double targetAcceleration = Math.Pow(100.0, 2.0) / (2.0 * 2000.0);
   double limitedDistance = Math.Min(2000.0, distance);
+
+  // Calculate speed at the current position.
   double targetSpeed = dockPart2 ? 0.3 : Math.Sqrt(2 * targetAcceleration * limitedDistance);
   targetSpeedLocal = targetDirectionLocal * targetSpeed;
   if(!dockPart2 && !(dockPart1 && distance < 10.0)) {
@@ -336,7 +354,7 @@ public void disengage() {
   thrusters.ForEach(thruster => thruster.ThrustOverride = 0.0f);
   ReleaseGyros();
   //SetControlThrusters( true );
-  SetDampeners( true );
+  cockpit.DampenersOverride = true;
 }
 
 public void controlThrusters(ref Vector3D speedLocal, ref Vector3D targetSpeedLocal, double elapsedNow) {
@@ -434,13 +452,6 @@ public String thrusterCount(Vector3 direction) {
   } else {
     return "None";
   }
-}
-
-public void SetDampeners(bool value) {
-    if(cockpit.DampenersOverride != value) {
-      Print((value ? "Enable" : "Disable" ) + " dampeners", true);
-      cockpit.ApplyAction("DampenersOverride");
-    }
 }
 
 public void SetControlThrusters(bool value) {
